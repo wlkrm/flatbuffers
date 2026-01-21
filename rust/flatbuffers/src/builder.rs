@@ -160,6 +160,26 @@ impl<'fbb> FlatBufferBuilder<'fbb, DefaultAllocator> {
     pub fn with_capacity(size: usize) -> Self {
         Self::from_vec(vec![0; size])
     }
+    /// Create a FlatBufferBuilder that is ready for writing, with a
+    /// ready-to-use capacity of the provided size and ready-to-use capacity for internal vecs.
+    ///
+    /// The maximum valid value is `FLATBUFFERS_MAX_BUFFER_SIZE`.
+    pub fn with_internal_capacity(size: usize, internal_vecs_size: usize) -> Self {
+        Self::from_vec_with_internal_capacity(vec![0; size], internal_vecs_size)
+    }
+    /// Create a FlatBufferBuilder that is ready for writing, reusing
+    /// an existing vector and ready-to-use capacity for internal vecs.
+    pub fn from_vec_with_internal_capacity(buffer: Vec<u8>, internal_vecs_size: usize) -> Self {
+        // we need to check the size here because we create the backing buffer
+        // directly, bypassing the typical way of using grow_allocator:
+        assert!(
+            buffer.len() <= FLATBUFFERS_MAX_BUFFER_SIZE,
+            "cannot initialize buffer bigger than 2 gigabytes"
+        );
+        let allocator = DefaultAllocator::from_vec(buffer);
+        Self::new_in_with_internal_capacity(allocator, internal_vecs_size)
+    }
+
     /// Create a FlatBufferBuilder that is ready for writing, reusing
     /// an existing vector.
     pub fn from_vec(buffer: Vec<u8>) -> Self {
@@ -198,6 +218,27 @@ impl<'fbb, A: Allocator> FlatBufferBuilder<'fbb, A> {
             min_align: 0,
             force_defaults: false,
             strings_pool: Vec::new(),
+
+            _phantom: PhantomData,
+        }
+    }
+
+    /// Create a [`FlatBufferBuilder`] that is ready for writing with a custom [`Allocator`] with preallocated internal vecs.
+    pub fn new_in_with_internal_capacity(allocator: A, internal_capacity: usize) -> Self {
+        let head = ReverseIndex::end();
+        FlatBufferBuilder {
+            allocator,
+            head,
+
+            field_locs: Vec::with_capacity(internal_capacity),
+            written_vtable_revpos: Vec::with_capacity(internal_capacity),
+
+            nested: false,
+            finished: false,
+
+            min_align: 0,
+            force_defaults: false,
+            strings_pool: Vec::with_capacity(internal_capacity),
 
             _phantom: PhantomData,
         }
